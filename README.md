@@ -140,6 +140,16 @@ Clear all memories for a specific user.
 }
 ```
 
+### GET /health
+Check the health status of the service.
+
+**Response**:
+```json
+{
+  "status": "healthy"
+}
+```
+
 ## Testing
 
 Run the test suite:

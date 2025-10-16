@@ -90,3 +90,9 @@ def test_clear_memories_error(mock_memory):
     
     assert response.status_code == 200
     assert response.json()["status"] == "success"  # Code always returns success
+
+def test_health_check():
+    response = client.get("/health")
+    
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}

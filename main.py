@@ -188,3 +188,10 @@ async def clear_user_data(user_id: str):
             "status": "error",
             "message": f"Failed to clear data for user {user_id}: {str(e)}"
         }
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint to verify the service is running.
+    """
+    return {"status": "healthy"}
