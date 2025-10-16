@@ -1,27 +1,25 @@
 # Mem0 Chat Memory API
 
-A FastAPI-based chat memory system that leverages Mem0 for persistent, user-specific conversation memory. Store and retrieve chat histories while maintaining contextual knowledge across sessions using vector embeddings and a relational database.
+A FastAPI-based chat memory system that leverages Mem0 for persistent, user-specific conversation memory. Store and retrieve contextual knowledge across sessions using vector embeddings in Qdrant.
 
 ## Features
 
-- **Persistent Chat Storage**: Store user and AI messages in PostgreSQL
-- **Memory Management**: Use Mem0 for intelligent memory retrieval and context
+- **Intelligent Memory Management**: Use Mem0 for persistent, user-specific memory storage and retrieval
 - **Vector Search**: Qdrant-powered semantic search for relevant memories
 - **LLM Integration**: Ollama-based embeddings and language models
-- **RESTful API**: Simple endpoints for adding and retrieving chats
+- **RESTful API**: Simple endpoints for adding conversations and retrieving memories
 - **Docker Support**: Easy containerized deployment
 
 ## Prerequisites
 
 ### For Local Development
 - Python 3.11+
-- PostgreSQL database
 - Qdrant vector database
 - Ollama with required models
 
 ### For Docker Deployment
 - Docker and Docker Compose
-- External services (PostgreSQL, Qdrant, Ollama) or use included Docker setup
+- External services (Qdrant, Ollama) or use included Docker setup
 
 ## Installation
 
@@ -47,9 +45,8 @@ A FastAPI-based chat memory system that leverages Mem0 for persistent, user-spec
 4. **Set up environment variables**:
    Create a `.env` file or set environment variables:
    ```bash
-   DATABASE_URL=postgresql://user:password@localhost:5432/mem0_db
    OLLAMA_BASE_URL=http://localhost:11434
-   OLLAMA_MODEL=granite4:latest
+   OLLAMA_MODEL=llama3.2
    OLLAMA_EMBEDDING_MODEL=nomic-embed-text
    OLLAMA_EMBEDDING_BASE_URL=http://localhost:11434
    QDRANT_HOST=localhost
@@ -59,38 +56,27 @@ A FastAPI-based chat memory system that leverages Mem0 for persistent, user-spec
    ```
 
 5. **Start external services**:
-   - PostgreSQL
    - Qdrant
-   - Ollama (with models `granite4:latest` and `nomic-embed-text`)
+   - Ollama (with models `llama3.2` and `nomic-embed-text`)
 
-6. **Run database migrations**:
-   ```bash
-   alembic upgrade head
-   ```
-
-7. **Start the application**:
+6. **Start the application**:
    ```bash
    uvicorn main:app --reload
    ```
 
 ### Docker Deployment
 
-1. **Ensure external services are running** (PostgreSQL, Qdrant, Ollama)
+1. **Ensure external services are running** (Qdrant, Ollama)
 
 2. **Build and start**:
    ```bash
    docker-compose up --build -d
    ```
 
-3. **Run migrations** (if needed):
-   ```bash
-   docker-compose exec app alembic upgrade head
-   ```
-
 ## API Documentation
 
 ### POST /add
-Add a new conversation to memory and database. Only user messages are stored in memory for context retrieval.
+Add a new conversation to memory. Only user messages are stored in memory for context retrieval.
 
 **Request Body**:
 ```json
@@ -103,8 +89,9 @@ Add a new conversation to memory and database. Only user messages are stored in 
 
 **Notes**:
 - Only the `user_message` is stored in Mem0 memory for future context retrieval
-- Both user and AI messages are stored in the database for chat history
 - The `ai_message` is not added to memory to avoid storing generated responses as contextual memory
+- Memory extraction is configured to be highly aggressive to capture maximum conversational context
+- Multiple memory storage attempts are made with different metadata to ensure comprehensive storage
 
 **Response**:
 ```json
@@ -114,19 +101,25 @@ Add a new conversation to memory and database. Only user messages are stored in 
 ```
 
 ### GET /get
-Retrieve chat history and relevant memories.
+Retrieve relevant memories for a user based on a query.
 
 **Query Parameters**:
 - `user_id` (required): User identifier
-- `msg` (required): Current message/query
-- `num_chats` (optional): Number of recent chats to include (default: 10)
-- `include_chat_history` (optional): Include chat history in response (default: false)
+- `msg` (required): Query message for finding relevant memories
 
 **Notes**:
 - If `USE_LLM_REFORMAT=true`, the `msg` parameter will be reformatted using the LLM for better search results before querying memories.
+- Returns up to 20 relevant memories for the user
+
+**Response**:
+```json
+{
+  "data": "<knowledge_about_user>\n- User prefers action movies\n- User likes sci-fi genre\n</knowledge_about_user>"
+}
+```
 
 ### DELETE /clear
-Clear all chat history and memories for a specific user.
+Clear all memories for a specific user.
 
 **Query Parameters**:
 - `user_id` (required): User identifier to clear data for
@@ -135,7 +128,7 @@ Clear all chat history and memories for a specific user.
 ```json
 {
   "status": "success",
-  "message": "Cleared X chat messages and all memories for user Y"
+  "message": "Cleared all memories for user Y"
 }
 ```
 
@@ -158,17 +151,13 @@ pytest tests/
 
 ### Code Structure
 - `main.py`: FastAPI application and endpoints
-- `models.py`: SQLAlchemy database models
 - `config.py`: Configuration settings
-- `alembic/`: Database migrations
 - `tests/`: Unit tests
 
 ### Adding New Features
-1. Update models in `models.py`
-2. Create migration: `alembic revision --autogenerate -m "description"`
-3. Apply migration: `alembic upgrade head`
-4. Add tests in `tests/`
-5. Update API endpoints in `main.py`
+1. Update API endpoints in `main.py`
+2. Add tests in `tests/`
+3. Update documentation
 
 ### Rebuilding Docker
 After code changes:

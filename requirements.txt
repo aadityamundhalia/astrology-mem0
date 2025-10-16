@@ -1,11 +1,8 @@
 fastapi
 uvicorn
 mem0ai
-psycopg2-binary
-sqlalchemy
 ollama
 pydantic
-alembic
 python-dotenv
 pytest
 httpx

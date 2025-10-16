@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from mem0 import Memory
 import json
-from models import SessionLocal, Chat
 from pydantic import BaseModel
 from config import (
     OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_EMBEDDING_MODEL,
@@ -11,6 +10,7 @@ from config import (
 import traceback
 from typing import Optional
 import ollama
+import datetime
 
 app = FastAPI()
 
@@ -37,7 +37,7 @@ config = {
         "provider": "ollama",
         "config": {
             "model": OLLAMA_MODEL,
-            "temperature": 0.2,
+            "temperature": 0.7,  # Increased from 0.2 to encourage more memory extraction
             "max_tokens": 2000,
             "ollama_base_url": OLLAMA_BASE_URL,
         },
@@ -60,89 +60,103 @@ async def add_chat(request: AddRequest):
     user_message = request.user_message
     ai_message = request.ai_message
 
-    # Add to memory (only user messages)
+    # Add to memory with enhanced metadata to encourage storage
     message_text = [
         {"role": "user", "content": user_message},
     ]
 
     try:
-        memory.add(messages=message_text, user_id=user_id, infer=True)
+        # Add multiple variations to increase memory storage
+        memory.add(
+            messages=message_text, 
+            user_id=user_id, 
+            infer=True,
+            metadata={
+                "importance": "high", 
+                "type": "conversation",
+                "timestamp": str(datetime.datetime.utcnow()),
+                "should_remember": "true"
+            }
+        )
+        
+        # Add again with different metadata to force more storage
+        memory.add(
+            messages=message_text, 
+            user_id=user_id, 
+            infer=True,
+            metadata={
+                "importance": "critical", 
+                "type": "user_input",
+                "timestamp": str(datetime.datetime.utcnow()),
+                "should_remember": "true",
+                "context": "personal_preference"
+            }
+        )
+        
+        # Add a third time with even more aggressive settings
+        memory.add(
+            messages=message_text, 
+            user_id=user_id, 
+            infer=True,
+            metadata={
+                "importance": "maximum", 
+                "type": "memory",
+                "timestamp": str(datetime.datetime.utcnow()),
+                "should_remember": "true",
+                "force_storage": "true"
+            }
+        )
+        
     except Exception as e:
         print(f"Error adding to memory: {e}")
         print(traceback.format_exc())
-
-    # Store in DB
-    db = SessionLocal()
-    user_chat = Chat(user_id=user_id, role="user", content=user_message)
-    assistant_chat = Chat(
-        user_id=user_id, role="assistant", content=ai_message
-    )
-    db.add(user_chat)
-    db.add(assistant_chat)
-    db.commit()
-    db.close()
 
     return {"status": "success"}
 
 
 @app.get("/get")
-async def get_chats(
+async def get_memories(
     user_id: str,
-    msg: str,
-    num_chats: int = 10,
-    include_chat_history: bool = False
+    msg: str
 ):
-    if include_chat_history:
-        db = SessionLocal()
-        chats = db.query(Chat).filter(Chat.user_id == user_id).\
-            order_by(Chat.timestamp.desc()).limit(num_chats).all()
-        db.close()
-
-        # Reverse to chronological order
-        chats = chats[::-1]
-        chat_history = [{"role": c.role, "content": c.content} for c in chats]
-        chat_history_json = json.dumps(chat_history, indent=2)
-
-        output = f"<chat_history>\n{chat_history_json}\n</chat_history>"
-
-        return {"data": output}
-    else:
-        # Reformat query using LLM if enabled
-        query = msg
-        if USE_LLM_REFORMAT:
-            try:
-                response = ollama.chat(
-                    model=OLLAMA_MODEL,
-                    messages=[{
-                        "role": "user",
-                        "content": f"Reformat this query to be more suitable for semantic search and memory retrieval: {msg}"
-                    }]
-                )
-                query = response['message']['content'].strip()
-            except Exception as e:
-                print(f"Error reformatting query with LLM: {e}")
-                # Fall back to original message
-        
-        # Knowledge
+    # Reformat query using LLM if enabled
+    query = msg
+    if USE_LLM_REFORMAT:
+        try:
+            response = ollama.chat(
+                model=OLLAMA_MODEL,
+                messages=[{
+                    "role": "user",
+                    "content": f"Reformat this query to be more suitable for semantic search and memory retrieval: {msg}"
+                }]
+            )
+            query = response['message']['content'].strip()
+        except Exception as e:
+            print(f"Error reformatting query with LLM: {e}")
+            # Fall back to original message
+    
+    # Get memories from Mem0
+    try:
         knowledge = memory.search(
-            query=query, user_id=user_id, limit=10
+            query=query, user_id=user_id, limit=20  # Increased limit
         )
         knowledge_str = "\n".join(
             f"- {entry['memory']}" for entry in knowledge["results"]
         )
 
+        output = "<knowledge_about_user>\n" + knowledge_str + "\n</knowledge_about_user>"
+
+        return {"data": output}
+    except Exception as e:
+        print(f"Error retrieving memories: {e}")
+        return {"data": "<knowledge_about_user>\n</knowledge_about_user>"}
+
 @app.delete("/clear")
 async def clear_user_data(user_id: str):
     """
-    Clear all chat history and memories for a given user
+    Clear all memories for a given user
     """
     try:
-        # Clear chat history from database
-        db = SessionLocal()
-        deleted_chats = db.query(Chat).filter(Chat.user_id == user_id).delete()
-        db.commit()
-        db.close()
-
         # Clear memories from Mem0
         try:
             print(f"Attempting to delete memories for user {user_id}")
@@ -162,11 +176,10 @@ async def clear_user_data(user_id: str):
                     print(f"Deleted memory {memory_id}")
             except Exception as alt_error:
                 print(f"Alternative memory deletion also failed for user {user_id}: {alt_error}")
-                # Continue with database cleanup
 
         return {
             "status": "success",
-            "message": f"Cleared {deleted_chats} chat messages and all memories for user {user_id}"
+            "message": f"Cleared all memories for user {user_id}"
         }
     except Exception as e:
         print(f"Error clearing data for user {user_id}: {e}")
