@@ -29,7 +29,7 @@ A FastAPI-based chat memory system that leverages Mem0 for persistent, user-spec
 
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/aadityamundhalia/astrology-mem0.git
    cd mem0
    ```
 
