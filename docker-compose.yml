@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8085:8085"
+    environment:
+      DATABASE_URL: postgresql://default:secret@192.168.0.200:5432/default
+      OLLAMA_BASE_URL: http://192.168.0.200:11434
+      OLLAMA_MODEL: granite4:latest
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+      QDRANT_HOST: 192.168.0.200
+      QDRANT_PORT: 6333
+      QDRANT_COLLECTION: mem0_collection
