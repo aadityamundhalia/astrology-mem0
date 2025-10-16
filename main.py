@@ -132,6 +132,47 @@ async def get_chats(
             f"- {entry['memory']}" for entry in knowledge["results"]
         )
 
-        output = "<knowledge_about_user>\n" + knowledge_str + "\n</knowledge_about_user>"
+@app.delete("/clear")
+async def clear_user_data(user_id: str):
+    """
+    Clear all chat history and memories for a given user
+    """
+    try:
+        # Clear chat history from database
+        db = SessionLocal()
+        deleted_chats = db.query(Chat).filter(Chat.user_id == user_id).delete()
+        db.commit()
+        db.close()
 
-        return {"data": output}
+        # Clear memories from Mem0
+        try:
+            print(f"Attempting to delete memories for user {user_id}")
+            memory.delete(user_id=user_id)
+            print(f"Successfully called memory.delete for user {user_id}")
+        except Exception as mem_error:
+            print(f"Direct memory.delete failed for user {user_id}: {mem_error}")
+            # Try alternative method - search and delete individually
+            try:
+                print(f"Trying alternative method for user {user_id}")
+                user_memories = memory.search(query=" ", user_id=user_id, limit=1000)  # Try with space
+                print(f"Found {len(user_memories.get('results', []))} memories for user {user_id}")
+                memory_ids = [mem.get('id') for mem in user_memories.get('results', []) if mem.get('id')]
+                print(f"Memory IDs to delete: {memory_ids}")
+                for memory_id in memory_ids:
+                    memory.delete(memory_id=memory_id)
+                    print(f"Deleted memory {memory_id}")
+            except Exception as alt_error:
+                print(f"Alternative memory deletion also failed for user {user_id}: {alt_error}")
+                # Continue with database cleanup
+
+        return {
+            "status": "success",
+            "message": f"Cleared {deleted_chats} chat messages and all memories for user {user_id}"
+        }
+    except Exception as e:
+        print(f"Error clearing data for user {user_id}: {e}")
+        print(traceback.format_exc())
+        return {
+            "status": "error",
+            "message": f"Failed to clear data for user {user_id}: {str(e)}"
+        }

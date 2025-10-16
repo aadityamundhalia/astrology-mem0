@@ -120,10 +120,25 @@ Retrieve chat history and relevant memories.
 **Notes**:
 - If `USE_LLM_REFORMAT=true`, the `msg` parameter will be reformatted using the LLM for better search results before querying memories.
 
+### DELETE /clear
+Clear all chat history and memories for a specific user.
+
+**Query Parameters**:
+- `user_id` (required): User identifier to clear data for
+
 **Response**:
 ```json
 {
-  "data": "Response with memories and optionally chat history"
+  "status": "success",
+  "message": "Cleared X chat messages and all memories for user Y"
+}
+```
+
+**Error Response**:
+```json
+{
+  "status": "error",
+  "message": "Failed to clear data for user Y: error details"
 }
 ```
 

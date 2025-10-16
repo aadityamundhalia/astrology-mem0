@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 import json
 from main import app
 
@@ -111,3 +111,37 @@ def test_get_chats_missing_user_id():
     """Test get chats without user_id"""
     response = client.get("/get")
     assert response.status_code == 422
+
+
+def test_clear_user_data_success(mock_memory, mock_db):
+    """Test successful user data clearing"""
+    # Mock DB delete to return number of deleted rows
+    mock_db.query.return_value.filter.return_value.delete.return_value = 5
+
+    response = client.delete("/clear?user_id=test_user")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "Cleared 5 chat messages" in data["message"]
+    assert "test_user" in data["message"]
+
+    # Verify DB operations
+    mock_db.query.assert_called()
+    mock_db.commit.assert_called_once()
+
+    # Verify memory delete was called with user_id
+    mock_memory.delete.assert_called_once_with(user_id="test_user")
+
+
+def test_clear_user_data_error(mock_memory, mock_db):
+    """Test clearing user data with error"""
+    # Mock DB to raise exception
+    mock_db.query.side_effect = Exception("Database error")
+
+    response = client.delete("/clear?user_id=test_user")
+
+    assert response.status_code == 200  # API returns 200 with error status
+    data = response.json()
+    assert data["status"] == "error"
+    assert "Failed to clear data" in data["message"]
