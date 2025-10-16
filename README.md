@@ -90,7 +90,7 @@ A FastAPI-based chat memory system that leverages Mem0 for persistent, user-spec
 ## API Documentation
 
 ### POST /add
-Add a new conversation to memory and database.
+Add a new conversation to memory and database. Only user messages are stored in memory for context retrieval.
 
 **Request Body**:
 ```json
@@ -100,6 +100,11 @@ Add a new conversation to memory and database.
   "ai_message": "I recommend Inception!"
 }
 ```
+
+**Notes**:
+- Only the `user_message` is stored in Mem0 memory for future context retrieval
+- Both user and AI messages are stored in the database for chat history
+- The `ai_message` is not added to memory to avoid storing generated responses as contextual memory
 
 **Response**:
 ```json

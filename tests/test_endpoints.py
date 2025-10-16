@@ -40,11 +40,9 @@ def test_add_chat_success(mock_memory, mock_db):
     mock_memory.add.assert_called_once()
     add_call_args = mock_memory.add.call_args
     messages = add_call_args[1]['messages']
-    assert len(messages) == 2
+    assert len(messages) == 1  # Only user message now
     assert messages[0]['role'] == 'user'
     assert messages[0]['content'] == 'What movie should I watch?'
-    assert messages[1]['role'] == 'assistant'
-    assert messages[1]['content'] == 'I recommend Inception!'
 
     # Verify DB operations
     assert mock_db.add.call_count == 2  # user and assistant messages

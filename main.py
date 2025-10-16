@@ -60,10 +60,9 @@ async def add_chat(request: AddRequest):
     user_message = request.user_message
     ai_message = request.ai_message
 
-    # Add to memory
+    # Add to memory (only user messages)
     message_text = [
         {"role": "user", "content": user_message},
-        {"role": "assistant", "content": ai_message},
     ]
 
     try:
