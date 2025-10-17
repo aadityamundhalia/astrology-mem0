@@ -21,8 +21,7 @@ class AddRequest(BaseModel):
     ai_message: str
 
 
-app = FastAPI()
-
+# CRITICAL FIX: Simplified config without redundant settings
 config = {
     "vector_store": {
         "provider": "qdrant",
@@ -37,7 +36,7 @@ config = {
         "provider": "ollama",
         "config": {
             "model": OLLAMA_MODEL,
-            "temperature": 0.7,  # Increased from 0.2 to encourage more memory extraction
+            "temperature": 0.2,  # Lower temperature for more consistent memory extraction
             "max_tokens": 2000,
             "ollama_base_url": OLLAMA_BASE_URL,
         },
@@ -49,6 +48,7 @@ config = {
             "ollama_base_url": OLLAMA_EMBEDDING_BASE_URL,
         },
     },
+    "version": "v1.1"  # CRITICAL: Use v1.1 for better memory operations
 }
 
 memory = Memory.from_config(config)
@@ -60,58 +60,40 @@ async def add_chat(request: AddRequest):
     user_message = request.user_message
     ai_message = request.ai_message
 
-    # Add to memory with enhanced metadata to encourage storage
+    # CRITICAL FIX: Use proper message format for conversation context
+    # Include both user and assistant messages for better context extraction
     message_text = [
         {"role": "user", "content": user_message},
+        {"role": "assistant", "content": ai_message}
     ]
 
     try:
-        # Add multiple variations to increase memory storage
-        memory.add(
-            messages=message_text, 
-            user_id=user_id, 
-            infer=True,
+        # CRITICAL FIX: Single add call with proper parameters
+        # The issue was multiple redundant add() calls which can confuse the LLM
+        result = memory.add(
+            messages=message_text,
+            user_id=user_id,
             metadata={
-                "importance": "high", 
-                "type": "conversation",
                 "timestamp": str(datetime.datetime.utcnow()),
-                "should_remember": "true"
+                "type": "conversation"
             }
         )
         
-        # Add again with different metadata to force more storage
-        memory.add(
-            messages=message_text, 
-            user_id=user_id, 
-            infer=True,
-            metadata={
-                "importance": "critical", 
-                "type": "user_input",
-                "timestamp": str(datetime.datetime.utcnow()),
-                "should_remember": "true",
-                "context": "personal_preference"
-            }
-        )
+        print(f"Memory add result: {result}")
         
-        # Add a third time with even more aggressive settings
-        memory.add(
-            messages=message_text, 
-            user_id=user_id, 
-            infer=True,
-            metadata={
-                "importance": "maximum", 
-                "type": "memory",
-                "timestamp": str(datetime.datetime.utcnow()),
-                "should_remember": "true",
-                "force_storage": "true"
-            }
-        )
+        # Return the actual result for debugging
+        return {
+            "status": "success",
+            "result": result
+        }
         
     except Exception as e:
         print(f"Error adding to memory: {e}")
         print(traceback.format_exc())
-
-    return {"status": "success"}
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 
 @app.get("/get")
@@ -127,10 +109,11 @@ async def get_memories(
                 model=OLLAMA_MODEL,
                 messages=[{
                     "role": "user",
-                    "content": f"Reformat this query to be more suitable for semantic search and memory retrieval: {msg}"
+                    "content": f"Reformat this query to be more suitable for semantic search and memory retrieval. Return only the reformatted query, nothing else: {msg}"
                 }]
             )
             query = response['message']['content'].strip()
+            print(f"Reformatted query from '{msg}' to '{query}'")
         except Exception as e:
             print(f"Error reformatting query with LLM: {e}")
             # Fall back to original message
@@ -138,8 +121,16 @@ async def get_memories(
     # Get memories from Mem0
     try:
         knowledge = memory.search(
-            query=query, user_id=user_id, limit=20  # Increased limit
+            query=query, 
+            user_id=user_id, 
+            limit=20
         )
+        
+        print(f"Search results: {knowledge}")
+        
+        if not knowledge or not knowledge.get("results"):
+            return {"data": "<knowledge_about_user>\nNo memories found.\n</knowledge_about_user>"}
+        
         knowledge_str = "\n".join(
             f"- {entry['memory']}" for entry in knowledge["results"]
         )
@@ -149,7 +140,30 @@ async def get_memories(
         return {"data": output}
     except Exception as e:
         print(f"Error retrieving memories: {e}")
-        return {"data": "<knowledge_about_user>\n</knowledge_about_user>"}
+        print(traceback.format_exc())
+        return {"data": "<knowledge_about_user>\nError retrieving memories.\n</knowledge_about_user>"}
+
+
+@app.get("/get_all")
+async def get_all_memories(user_id: str):
+    """
+    Get all memories for a user to verify storage
+    """
+    try:
+        all_memories = memory.get_all(user_id=user_id)
+        return {
+            "status": "success",
+            "count": len(all_memories) if all_memories else 0,
+            "memories": all_memories
+        }
+    except Exception as e:
+        print(f"Error getting all memories: {e}")
+        print(traceback.format_exc())
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 
 @app.delete("/clear")
 async def clear_user_data(user_id: str):
@@ -157,26 +171,10 @@ async def clear_user_data(user_id: str):
     Clear all memories for a given user
     """
     try:
-        # Clear memories from Mem0
-        try:
-            print(f"Attempting to delete memories for user {user_id}")
-            memory.delete(user_id=user_id)
-            print(f"Successfully called memory.delete for user {user_id}")
-        except Exception as mem_error:
-            print(f"Direct memory.delete failed for user {user_id}: {mem_error}")
-            # Try alternative method - search and delete individually
-            try:
-                print(f"Trying alternative method for user {user_id}")
-                user_memories = memory.search(query=" ", user_id=user_id, limit=1000)  # Try with space
-                print(f"Found {len(user_memories.get('results', []))} memories for user {user_id}")
-                memory_ids = [mem.get('id') for mem in user_memories.get('results', []) if mem.get('id')]
-                print(f"Memory IDs to delete: {memory_ids}")
-                for memory_id in memory_ids:
-                    memory.delete(memory_id=memory_id)
-                    print(f"Deleted memory {memory_id}")
-            except Exception as alt_error:
-                print(f"Alternative memory deletion also failed for user {user_id}: {alt_error}")
-
+        print(f"Attempting to delete memories for user {user_id}")
+        memory.delete_all(user_id=user_id)
+        print(f"Successfully deleted memories for user {user_id}")
+        
         return {
             "status": "success",
             "message": f"Cleared all memories for user {user_id}"
@@ -188,6 +186,7 @@ async def clear_user_data(user_id: str):
             "status": "error",
             "message": f"Failed to clear data for user {user_id}: {str(e)}"
         }
+
 
 @app.get("/health")
 async def health_check():

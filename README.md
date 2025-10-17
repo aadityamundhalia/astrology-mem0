@@ -76,7 +76,7 @@ A FastAPI-based chat memory system that leverages Mem0 for persistent, user-spec
 ## API Documentation
 
 ### POST /add
-Add a new conversation to memory. Only user messages are stored in memory for context retrieval.
+Add a new conversation to memory. Both user and AI messages are stored for better context extraction.
 
 **Request Body**:
 ```json
@@ -88,15 +88,27 @@ Add a new conversation to memory. Only user messages are stored in memory for co
 ```
 
 **Notes**:
-- Only the `user_message` is stored in Mem0 memory for future context retrieval
-- The `ai_message` is not added to memory to avoid storing generated responses as contextual memory
-- Memory extraction is configured to be highly aggressive to capture maximum conversational context
-- Multiple memory storage attempts are made with different metadata to ensure comprehensive storage
+- Both user and AI messages are stored in Mem0 memory for comprehensive context retrieval
+- Memory extraction is configured for optimal storage
+- Returns the memory addition result for debugging
 
 **Response**:
 ```json
 {
-  "status": "success"
+  "status": "success",
+  "result": {
+    "id": "mem_123",
+    "event": "ADD",
+    "data": "..."
+  }
+}
+```
+
+**Error Response**:
+```json
+{
+  "status": "error",
+  "error": "Memory error details"
 }
 ```
 
@@ -110,11 +122,60 @@ Retrieve relevant memories for a user based on a query.
 **Notes**:
 - If `USE_LLM_REFORMAT=true`, the `msg` parameter will be reformatted using the LLM for better search results before querying memories.
 - Returns up to 20 relevant memories for the user
+- If no memories are found, returns "No memories found."
 
 **Response**:
 ```json
 {
   "data": "<knowledge_about_user>\n- User prefers action movies\n- User likes sci-fi genre\n</knowledge_about_user>"
+}
+```
+
+**No Memories Response**:
+```json
+{
+  "data": "<knowledge_about_user>\nNo memories found.\n</knowledge_about_user>"
+}
+```
+
+**Error Response**:
+```json
+{
+  "data": "<knowledge_about_user>\nError retrieving memories.\n</knowledge_about_user>"
+}
+```
+
+### GET /get_all
+Retrieve all memories for a user for verification purposes.
+
+**Query Parameters**:
+- `user_id` (required): User identifier
+
+**Response**:
+```json
+{
+  "status": "success",
+  "count": 2,
+  "memories": [
+    {
+      "id": "mem_123",
+      "memory": "User likes action movies",
+      "metadata": {...}
+    },
+    {
+      "id": "mem_124",
+      "memory": "User prefers sci-fi genre",
+      "metadata": {...}
+    }
+  ]
+}
+```
+
+**Error Response**:
+```json
+{
+  "status": "error",
+  "error": "Error details"
 }
 ```
 

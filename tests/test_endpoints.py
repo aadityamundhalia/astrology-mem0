@@ -1,4 +1,7 @@
 import pytest
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from main import app
@@ -7,7 +10,8 @@ client = TestClient(app)
 
 @patch('main.memory')
 def test_add_chat_success(mock_memory):
-    mock_memory.add = MagicMock()
+    mock_result = {"id": "mem123"}
+    mock_memory.add = MagicMock(return_value=mock_result)
     
     response = client.post("/add", json={
         "user_id": 1,
@@ -16,8 +20,7 @@ def test_add_chat_success(mock_memory):
     })
     
     assert response.status_code == 200
-    assert response.json() == {"status": "success"}
-    assert mock_memory.add.call_count == 3  # Called three times as per code
+    assert response.json() == {"status": "success", "result": mock_result}
 
 @patch('main.memory')
 def test_add_chat_memory_error(mock_memory):
@@ -30,7 +33,7 @@ def test_add_chat_memory_error(mock_memory):
     })
     
     assert response.status_code == 200
-    assert response.json() == {"status": "success"}  # Still returns success even on error
+    assert response.json() == {"status": "error", "error": "Memory error"}
 
 @patch('main.memory')
 @patch('main.ollama.chat')
@@ -68,31 +71,55 @@ def test_get_memories_error(mock_memory):
     response = client.get("/get?user_id=1&msg=Hello")
     
     assert response.status_code == 200
-    assert response.json()["data"] == "<knowledge_about_user>\n</knowledge_about_user>"
+    assert response.json()["data"] == "<knowledge_about_user>\nError retrieving memories.\n</knowledge_about_user>"
 
 @patch('main.memory')
 def test_clear_memories_success(mock_memory):
-    mock_memory.delete = MagicMock()
+    mock_memory.delete_all = MagicMock()
     
     response = client.delete("/clear?user_id=1")
     
     assert response.status_code == 200
     assert response.json()["status"] == "success"
-    mock_memory.delete.assert_called_with(user_id="1")
+    mock_memory.delete_all.assert_called_with(user_id="1")
 
 @patch('main.memory')
 def test_clear_memories_error(mock_memory):
-    # Note: The code always returns success even on errors, so testing that it handles errors gracefully
-    mock_memory.delete.side_effect = Exception("Delete error")
-    mock_memory.search.return_value = {"results": [{"id": "mem1"}]}
+    mock_memory.delete_all = MagicMock(side_effect=Exception("Delete error"))
     
     response = client.delete("/clear?user_id=1")
     
     assert response.status_code == 200
-    assert response.json()["status"] == "success"  # Code always returns success
+    assert response.json()["status"] == "error"
 
 def test_health_check():
     response = client.get("/health")
     
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
+
+@patch('main.memory')
+def test_get_all_memories_success(mock_memory):
+    mock_memories = [{"id": "mem1", "memory": "Test memory"}]
+    mock_memory.get_all = MagicMock(return_value=mock_memories)
+    
+    response = client.get("/get_all?user_id=1")
+    
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "count": 1,
+        "memories": mock_memories
+    }
+
+@patch('main.memory')
+def test_get_all_memories_error(mock_memory):
+    mock_memory.get_all = MagicMock(side_effect=Exception("Get all error"))
+    
+    response = client.get("/get_all?user_id=1")
+    
+    assert response.status_code == 200
+    assert response.json() == {"status": "error", "error": "Get all error"}
+
+if __name__ == "__main__":
+    pytest.main([__file__])
