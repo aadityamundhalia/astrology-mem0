@@ -151,17 +151,35 @@ async def get_all_memories(user_id: str):
     """
     try:
         all_memories = memory.get_all(user_id=user_id)
-        return {
-            "status": "success",
-            "count": len(all_memories) if all_memories else 0,
-            "memories": all_memories
-        }
+        
+        # Extract actual memories from results
+        if all_memories and isinstance(all_memories, dict):
+            results = all_memories.get('results', [])
+            return {
+                "status": "success",
+                "count": len(results),
+                "memories": results  # Return the actual list, not the wrapper dict
+            }
+        elif all_memories and isinstance(all_memories, list):
+            return {
+                "status": "success",
+                "count": len(all_memories),
+                "memories": all_memories
+            }
+        else:
+            return {
+                "status": "success",
+                "count": 0,
+                "memories": []
+            }
     except Exception as e:
         print(f"Error getting all memories: {e}")
         print(traceback.format_exc())
         return {
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "count": 0,
+            "memories": []
         }
 
 
@@ -172,12 +190,41 @@ async def clear_user_data(user_id: str):
     """
     try:
         print(f"Attempting to delete memories for user {user_id}")
-        memory.delete_all(user_id=user_id)
-        print(f"Successfully deleted memories for user {user_id}")
+        
+        # Get all memories first to delete them individually
+        all_memories = memory.get_all(user_id=user_id)
+        
+        deleted_count = 0
+        if all_memories:
+            # Handle dict format
+            if isinstance(all_memories, dict):
+                results = all_memories.get('results', [])
+            else:
+                results = all_memories if isinstance(all_memories, list) else []
+            
+            # Delete each memory by ID
+            for mem in results:
+                try:
+                    memory_id = mem.get('id')
+                    if memory_id:
+                        memory.delete(memory_id=memory_id)
+                        deleted_count += 1
+                        print(f"Deleted memory {memory_id}")
+                except Exception as e:
+                    print(f"Error deleting memory {mem.get('id')}: {e}")
+        
+        # Also call delete_all as backup
+        try:
+            memory.delete_all(user_id=user_id)
+        except Exception as e:
+            print(f"delete_all error (non-critical): {e}")
+        
+        print(f"Successfully deleted {deleted_count} memories for user {user_id}")
         
         return {
             "status": "success",
-            "message": f"Cleared all memories for user {user_id}"
+            "message": f"Cleared {deleted_count} memories for user {user_id}",
+            "deleted_count": deleted_count
         }
     except Exception as e:
         print(f"Error clearing data for user {user_id}: {e}")
